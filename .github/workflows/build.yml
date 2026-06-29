@@ -1,0 +1,25 @@
+name: Build Oscaro Kernel with KernelSU Next
+
+on:
+  workflow_dispatch: # Allows you to manually click a button to start the build
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Kernel Build
+        uses: dabao1955/kernel_build_action@main
+        with:
+          kernel-url: https://github.com/LineageOS/android_kernel_oneplus_sm6375
+          kernel-branch: lineage-21
+          config: vendor/holi-perf_defconfig
+          arch: arm64
+          aosp-gcc: true
+          aosp-clang: true
+          android-version: 14
+          aosp-clang-version: r487747c
+          ksu: true
+          ksu-other: true
+          ksu-url: https://github.com/KernelSU-Next/KernelSU-Next
+          ksu-version: main
+          anykernel3: true
