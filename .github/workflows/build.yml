@@ -1,4 +1,4 @@
-name: Build Oscaro Kernel with KernelSU Next
+name: Build Oscaro Kernel with KernelSU Next (LineageOS 23)
 
 on:
   workflow_dispatch: # Allows you to manually click a button to start the build
@@ -11,13 +11,13 @@ jobs:
         uses: dabao1955/kernel_build_action@main
         with:
           kernel-url: https://github.com/LineageOS/android_kernel_oneplus_sm6375
-          kernel-branch: lineage-23
+          kernel-branch: lineage-23.2
           config: vendor/holi-perf_defconfig
           arch: arm64
           aosp-gcc: true
           aosp-clang: true
-          android-version: 14
-          aosp-clang-version: r487747c
+          android-version: 16
+          aosp-clang-version: r522817
           ksu: true
           ksu-other: true
           ksu-url: https://github.com/KernelSU-Next/KernelSU-Next
