@@ -11,7 +11,7 @@ jobs:
         uses: dabao1955/kernel_build_action@main
         with:
           kernel-url: https://github.com/LineageOS/android_kernel_oneplus_sm6375
-          kernel-branch: lineage-21
+          kernel-branch: lineage-23
           config: vendor/holi-perf_defconfig
           arch: arm64
           aosp-gcc: true
