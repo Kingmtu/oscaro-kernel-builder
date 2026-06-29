@@ -16,8 +16,8 @@ jobs:
           arch: arm64
           aosp-gcc: true
           aosp-clang: true
-          android-version: 12 # Tricks the action into fetching the available GCC 4.9 toolchain layout
-          aosp-clang-version: r522817 # Keeps the proper Android 16 compiler target active
+          android-version: 12 # Keeps the working GCC 4.9 toolchain mapping active
+          aosp-clang-version: r487747c # Switched to a stable, verified Clang 17 build
           ksu: true
           ksu-other: true
           ksu-url: https://github.com/KernelSU-Next/KernelSU-Next
