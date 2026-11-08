@@ -27,14 +27,14 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential curl flex git gnupg gperf libelf-dev libssl-dev lz4 liblz4-tool lzop rsync libxml2-utils zip unzip standard-rapl-bin
+          sudo apt-get install -y bc bison build-essential curl flex git gnupg gperf libelf-dev libssl-dev lz4 liblz4-tool lzop rsync libxml2-utils zip unzip
           sudo apt-get clean
 
       - name: Download AOSP Clang Toolchain
         run: |
           mkdir -p $GITHUB_WORKSPACE/clang
           cd $GITHUB_WORKSPACE/clang
-          # Uses stable Android 12/13 r450784d compiler toolchain optimal for 5.4 kernels
+          # Uses stable Android r450784d compiler toolchain optimal for 5.4 kernels
           curl -LO https://googlesource.com
           tar -C $GITHUB_WORKSPACE/clang -xf clang-r450784d.tar.gz
           rm clang-r450784d.tar.gz
@@ -50,7 +50,6 @@ jobs:
           curl -LSs "https://sukisu.org" | bash -s main
           
           # Inject configurations directly into the target defconfig
-          # (Modify defconfig name if Lineage tree uses a non-standard name like vendor/oscaro_defconfig)
           echo "CONFIG_KSU=y" >> arch/arm64/configs/vendor/sm6375_defconfig
           echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/vendor/sm6375_defconfig
           echo "CONFIG_KSU_KPM=y" >> arch/arm64/configs/vendor/sm6375_defconfig
