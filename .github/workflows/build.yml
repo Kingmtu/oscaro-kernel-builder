@@ -25,41 +25,33 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/LineageOS/android_kernel_oneplus_sm6375 -b lineage-24.0 kernel-source
 
-      - name: Integrate KernelSU-Next (5.4 + SUSFS v1.5.5 Native Branch)
+      - name: Integrate KernelSU-Next (Legacy 5.4 Branch)
         run: |
           cd kernel-source
-          # Pull the dedicated legacy_susfs branch (or fallback to legacy and apply patch)
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy_susfs || \
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s v1.0.5
 
-          # Safety check: create dummy static_call.h if any header requests it on 5.4
-          if [ ! -f "include/linux/static_call.h" ]; then
-            echo "#ifndef _LINUX_STATIC_CALL_H" > include/linux/static_call.h
-            echo "#define _LINUX_STATIC_CALL_H" >> include/linux/static_call.h
-            echo "#endif" >> include/linux/static_call.h
-          fi
-
-      - name: Apply SUSFS v1.5.5 (5.4 Kernel) Patches
+      - name: Apply SUSFS v1.5.5 (5.4 Kernel) Patches & Compatibility Stubs
         run: |
           git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu -b kernel-5.4 susfs
           cd kernel-source
           cp -r ../susfs/kernel_patches/fs/* ./fs/
           cp -r ../susfs/kernel_patches/include/linux/* ./include/linux/
 
-          # Apply main SUSFS 5.4 patch (ignore exit code 1 from missing bootconfig.c)
+          # Apply main SUSFS 5.4 patch
           patch -p1 --forward --batch < ../susfs/kernel_patches/50_add_susfs_in_kernel-5.4.patch || true
 
-          # Fix Hunk #1 reject in fs/proc/task_mmu.c (inject missing susfs_def.h header)
+          # Fix header rejects
           sed -i '1i #ifdef CONFIG_KSU_SUSFS\n#include <linux/susfs_def.h>\n#endif' fs/proc/task_mmu.c
-
-          # Fix Hunk #1 reject in include/linux/mount.h (inject susfs_mnt_id_backup into struct vfsmount)
           sed -i '/struct vfsmount {/a #ifdef CONFIG_KSU_SUSFS\n\tu64 susfs_mnt_id_backup;\n#endif' include/linux/mount.h
 
-          # Clean up .rej and .orig files
+          # CREATE LINUX 5.4 STUBS FOR KSU-NEXT (Fixes missing static_call.h & pgtable.h on 5.4)
+          echo -e "#ifndef _LINUX_STATIC_CALL_H\n#define _LINUX_STATIC_CALL_H\n#endif" > include/linux/static_call.h
+          echo -e "#ifndef _LINUX_PGTABLE_H\n#define _LINUX_PGTABLE_H\n#include <asm/pgtable.h>\n#endif" > include/linux/pgtable.h
+
           find . -name "*.rej" -delete
           find . -name "*.orig" -delete
 
-          # If legacy_susfs didn't already patch KSU, apply the SUSFS v1.5.5 KSU patch
           if [ -d "KernelSU-Next" ] && ! grep -q "CONFIG_KSU_SUSFS" KernelSU-Next/kernel/Kconfig 2>/dev/null; then
             cd KernelSU-Next
             patch -p1 --forward --batch < ../../susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
@@ -112,7 +104,6 @@ jobs:
             CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
             vendor/holi-qgki_defconfig
 
-          # Compile with -Wno-error; fallback to -j1 if any error occurs so it prints clearly at the bottom
           make -j$(nproc --all) O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 \
             KCFLAGS="-Wno-error" \
             CROSS_COMPILE=aarch64-linux-gnu- \
