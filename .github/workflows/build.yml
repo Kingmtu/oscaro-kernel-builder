@@ -30,6 +30,14 @@ jobs:
           cd kernel-source
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
 
+      - name: Patch SukiSU-Ultra for Linux 5.4 Compatibility
+        run: |
+          cd kernel-source
+          # Remove static_call.h include which is only present in Linux 5.10+
+          if [ -f "drivers/kernelsu/kernel_includes.h" ]; then
+            sed -i '/<linux\/static_call.h>/d' drivers/kernelsu/kernel_includes.h || true
+          fi
+
       - name: Apply SUSFS 5.4 Kernel Patches
         run: |
           git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu -b kernel-5.4 susfs
