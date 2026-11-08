@@ -28,7 +28,7 @@ jobs:
       - name: Integrate KernelSU-Next (Legacy 5.4 Support)
         run: |
           cd kernel-source
-          curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
 
       - name: Apply SUSFS 5.4 Patches
         run: |
@@ -37,6 +37,8 @@ jobs:
           cp -r ../susfs/kernel_patches/fs/* ./fs/
           cp -r ../susfs/kernel_patches/include/linux/* ./include/linux/
           patch -p1 < ../susfs/kernel_patches/50_add_susfs_in_kernel-5.4.patch
+          cd KernelSU
+          patch -p1 --forward < ../../susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
 
       - name: Bypass Module Vermagic Check (Prevents Broken Wi-Fi/Audio)
         run: |
@@ -55,6 +57,7 @@ jobs:
           CONFIG_HAVE_KPROBES=y
           CONFIG_KPROBE_EVENTS=y
           CONFIG_KSU=y
+          CONFIG_KSU_KPROBE_HOOKS=y
           CONFIG_KSU_SUSFS=y
           CONFIG_KSU_SUSFS_SUS_PATH=y
           CONFIG_KSU_SUSFS_SUS_MOUNT=y
@@ -73,4 +76,26 @@ jobs:
           
           make O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
+            vendor/holi-qgki_defconfig
+
+          make -j$(nproc --all) O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
+            Image
+
+      - name: Package Flashable AnyKernel3 Zip
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
+          sed -i 's/device.name1=.*/device.name1=oscaro/' AnyKernel3/anykernel.sh
+          sed -i 's/do.devicecheck=1/do.devicecheck=0/' AnyKernel3/anykernel.sh
+          sed -i 's|BLOCK=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;|BLOCK=auto;|' AnyKernel3/anykernel.sh
+          cp kernel-source/out/arch/arm64/boot/Image AnyKernel3/
+          cd AnyKernel3
+          zip -r9 ../AnyKernel3-oscaro-lineage24.0-KSUNext-SUSFS.zip * -x .git README.md *placeholder
+
+      - name: Upload Compiled Kernel
+        uses: actions/upload-artifact@v4
+        with:
+          name: oscaro-lineage24.0-ksunext-susfs
+          path: AnyKernel3-oscaro-lineage24.0-KSUNext-SUSFS.zip
