@@ -1,25 +1,100 @@
-name: Build Oscaro Kernel with KernelSU Next (LineageOS 23)
+name: Build oscaro LineageOS 24.0 KSU + SUSFS
 
 on:
-  workflow_dispatch: # Allows you to manually click a button to start the build
+  workflow_dispatch:
 
 jobs:
-  build-kernel:
-    runs-on: ubuntu-latest
+  build:
+    name: Build oscaro (lineage-24.0)
+    runs-on: ubuntu-22.04
+
     steps:
-      - name: Trigger Kernel Build
-        uses: dabao1955/kernel_build_action@main
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git ccache automake flex lzop bison gperf \
+            build-essential zip curl zlib1g-dev libssl-dev libxml2-utils \
+            xsltproc bc rsync libncurses5-dev python3 libelf-dev dwarves pahole
+
+      - name: Setup AOSP Clang (LLVM) Toolchain
+        run: |
+          mkdir -p clang
+          curl -LO https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r487747c.tar.gz
+          tar -C clang/ -xzf clang-r487747c.tar.gz
+
+      - name: Clone oscaro lineage-24.0 Kernel Source
+        run: |
+          git clone --depth=1 https://github.com/LineageOS/android_kernel_oneplus_sm6375 -b lineage-24.0 kernel-source
+
+      - name: Integrate KernelSU-Next (Legacy 5.4 Support)
+        run: |
+          cd kernel-source
+          curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next
+
+      - name: Apply SUSFS 5.4 Patches
+        run: |
+          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu -b kernel-5.4 susfs
+          cd kernel-source
+          cp -r ../susfs/kernel_patches/fs/* ./fs/
+          cp -r ../susfs/kernel_patches/include/linux/* ./include/linux/
+          patch -p1 < ../susfs/kernel_patches/50_add_susfs_in_kernel-5.4.patch
+
+      - name: Bypass Module Vermagic Check (Prevents Broken Wi-Fi/Audio)
+        run: |
+          cd kernel-source
+          # Allow stock lineage-24.0 vendor_boot & vendor modules (wlan.ko) to load cleanly
+          sed -i 's/!same_magic(modmagic, vermagic, info->index.vers)/0/' kernel/module.c
+          sed -i 's/return -ENOEXEC;/\/\* bypassed \*\//' kernel/module.c || true
+
+      - name: Enable KSU, SUSFS & Module Force-Load in Defconfig
+        run: |
+          cd kernel-source
+          cat << 'EOF' >> arch/arm64/configs/vendor/holi-qgki_defconfig
+          CONFIG_MODULES=y
+          CONFIG_MODULE_FORCE_LOAD=y
+          CONFIG_MODVERSIONS=n
+          CONFIG_KPROBES=y
+          CONFIG_HAVE_KPROBES=y
+          CONFIG_KPROBE_EVENTS=y
+          CONFIG_KSU=y
+          CONFIG_KSU_SUSFS=y
+          CONFIG_KSU_SUSFS_SUS_PATH=y
+          CONFIG_KSU_SUSFS_SUS_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_KSTAT=y
+          CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y
+          CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+          CONFIG_KSU_SUSFS_ENABLE_LOG=y
+          EOF
+
+      - name: Compile Kernel with Full LLVM
+        run: |
+          cd kernel-source
+          export PATH="$(pwd)/../clang/bin:$PATH"
+          
+          make O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
+            vendor/holi-qgki_defconfig
+
+          make -j$(nproc --all) O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
+            Image
+
+      - name: Package Flashable AnyKernel3 Zip
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
+          sed -i 's/device.name1=.*/device.name1=oscaro/' AnyKernel3/anykernel.sh
+          sed -i 's/do.devicecheck=1/do.devicecheck=0/' AnyKernel3/anykernel.sh
+          sed -i 's|BLOCK=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;|BLOCK=auto;|' AnyKernel3/anykernel.sh
+          cp kernel-source/out/arch/arm64/boot/Image AnyKernel3/
+          cd AnyKernel3
+          zip -r9 ../AnyKernel3-oscaro-lineage24.0-KSUNext-SUSFS.zip * -x .git README.md *placeholder
+
+      - name: Upload Compiled Kernel
+        uses: actions/upload-artifact@v4
         with:
-          kernel-url: https://github.com/LineageOS/android_kernel_oneplus_sm6375
-          kernel-branch: lineage-23.2
-          config: vendor/holi-perf_defconfig
-          arch: arm64
-          aosp-gcc: true
-          aosp-clang: true
-          android-version: 12 # Keeps the working GCC 4.9 toolchain mapping active
-          aosp-clang-version: r487747c # Switched to a stable, verified Clang 17 build
-          ksu: true
-          ksu-other: true
-          ksu-url: https://github.com/KernelSU-Next/KernelSU-Next
-          ksu-version: main
-          anykernel3: true
+          name: oscaro-lineage24.0-ksunext-susfs
+          path: AnyKernel3-oscaro-lineage24.0-KSUNext-SUSFS.zip
