@@ -25,12 +25,21 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/LineageOS/android_kernel_oneplus_sm6375 -b lineage-24.0 kernel-source
 
-      - name: Integrate SukiSU-Ultra (Pre-integrated SUSFS for 5.4)
+      - name: Integrate KernelSU-Next (5.4 + SUSFS v1.5.5 Native Branch)
         run: |
           cd kernel-source
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
+          # Pull the dedicated legacy_susfs branch (or fallback to legacy and apply patch)
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy_susfs || \
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s v1.0.5
 
-      - name: Apply SUSFS 5.4 Kernel Patches
+          # Safety check: create dummy static_call.h if any header requests it on 5.4
+          if [ ! -f "include/linux/static_call.h" ]; then
+            echo "#ifndef _LINUX_STATIC_CALL_H" > include/linux/static_call.h
+            echo "#define _LINUX_STATIC_CALL_H" >> include/linux/static_call.h
+            echo "#endif" >> include/linux/static_call.h
+          fi
+
+      - name: Apply SUSFS v1.5.5 (5.4 Kernel) Patches
         run: |
           git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu -b kernel-5.4 susfs
           cd kernel-source
@@ -50,12 +59,18 @@ jobs:
           find . -name "*.rej" -delete
           find . -name "*.orig" -delete
 
+          # If legacy_susfs didn't already patch KSU, apply the SUSFS v1.5.5 KSU patch
+          if [ -d "KernelSU-Next" ] && ! grep -q "CONFIG_KSU_SUSFS" KernelSU-Next/kernel/Kconfig 2>/dev/null; then
+            cd KernelSU-Next
+            patch -p1 --forward --batch < ../../susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
+            find . -name "*.rej" -delete
+            find . -name "*.orig" -delete
+          fi
+
       - name: Safely Bypass Module Vermagic Check
         run: |
           cd kernel-source
-          # Only bypass same_magic check; do NOT touch return -ENOEXEC
           sed -i 's/!same_magic(modmagic, vermagic, info->index.vers)/0/' kernel/module.c
-          # Also bypass check_modinfo_vermagic CRC check cleanly
           sed -i 's/check_version(info, modname, mod, crc)/1/' kernel/module.c
 
       - name: Enable KSU, SUSFS & Disable Werror in Defconfig
@@ -73,6 +88,7 @@ jobs:
           CONFIG_KALLSYMS=y
           CONFIG_KALLSYMS_ALL=y
           CONFIG_KSU=y
+          CONFIG_KSU_KPROBE_HOOKS=y
           CONFIG_KSU_SUSFS=y
           CONFIG_KSU_SUSFS_SUS_PATH=y
           CONFIG_KSU_SUSFS_SUS_MOUNT=y
@@ -82,6 +98,8 @@ jobs:
           CONFIG_KSU_SUSFS_TRY_UMOUNT=y
           CONFIG_KSU_SUSFS_SPOOF_UNAME=y
           CONFIG_KSU_SUSFS_ENABLE_LOG=y
+          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+          CONFIG_KSU_SUSFS_SUS_SU=n
           EOF
 
       - name: Compile Kernel with Full LLVM
@@ -94,7 +112,7 @@ jobs:
             CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
             vendor/holi-qgki_defconfig
 
-          # Compile with -Wno-error so Clang never fails on minor warnings
+          # Compile with -Wno-error; fallback to -j1 if any error occurs so it prints clearly at the bottom
           make -j$(nproc --all) O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 \
             KCFLAGS="-Wno-error" \
             CROSS_COMPILE=aarch64-linux-gnu- \
