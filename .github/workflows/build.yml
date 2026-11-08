@@ -34,9 +34,9 @@ jobs:
         run: |
           mkdir -p $GITHUB_WORKSPACE/clang
           cd $GITHUB_WORKSPACE/clang
-          # Uses stable Android r450784d compiler toolchain optimal for 5.4 kernels
-          curl -LO https://googlesource.com
-          tar -C $GITHUB_WORKSPACE/clang -xf clang-r450784d.tar.gz
+          # Direct archive download link from the official Google AOSP Prebuilts Git Server
+          curl -LO https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master-kernel-build-2022/clang-r450784d.tar.gz
+          tar -xf clang-r450784d.tar.gz
           rm clang-r450784d.tar.gz
 
       - name: Clone LineageOS Oscaro Kernel Source
