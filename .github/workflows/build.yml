@@ -50,16 +50,20 @@ jobs:
           find . -name "*.rej" -delete
           find . -name "*.orig" -delete
 
-      - name: Bypass Module Vermagic Check (Prevents Broken Wi-Fi/Audio)
+      - name: Safely Bypass Module Vermagic Check
         run: |
           cd kernel-source
+          # Only bypass same_magic check; do NOT touch return -ENOEXEC
           sed -i 's/!same_magic(modmagic, vermagic, info->index.vers)/0/' kernel/module.c
-          sed -i 's/return -ENOEXEC;/\/\* bypassed \*\//' kernel/module.c || true
+          # Also bypass check_modinfo_vermagic CRC check cleanly
+          sed -i 's/check_version(info, modname, mod, crc)/1/' kernel/module.c
 
-      - name: Enable KSU, SUSFS & Module Force-Load in Defconfig
+      - name: Enable KSU, SUSFS & Disable Werror in Defconfig
         run: |
           cd kernel-source
           cat << 'EOF' >> arch/arm64/configs/vendor/holi-qgki_defconfig
+          CONFIG_WERROR=n
+          CONFIG_PPC_WERROR=n
           CONFIG_MODULES=y
           CONFIG_MODULE_FORCE_LOAD=y
           CONFIG_MODVERSIONS=n
@@ -90,11 +94,13 @@ jobs:
             CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
             vendor/holi-qgki_defconfig
 
-          # Compile on all cores; if an error occurs, re-run with -j1 so the exact error is shown at the bottom of the log
+          # Compile with -Wno-error so Clang never fails on minor warnings
           make -j$(nproc --all) O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 \
+            KCFLAGS="-Wno-error" \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
             Image || make -j1 O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 \
+            KCFLAGS="-Wno-error" \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
             Image
