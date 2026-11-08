@@ -36,9 +36,27 @@ jobs:
           cd kernel-source
           cp -r ../susfs/kernel_patches/fs/* ./fs/
           cp -r ../susfs/kernel_patches/include/linux/* ./include/linux/
-          patch -p1 < ../susfs/kernel_patches/50_add_susfs_in_kernel-5.4.patch
-          cd KernelSU
-          patch -p1 --forward < ../../susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
+
+          # Apply main SUSFS 5.4 patch (ignore exit code 1 from missing bootconfig.c)
+          patch -p1 --forward --batch < ../susfs/kernel_patches/50_add_susfs_in_kernel-5.4.patch || true
+
+          # Fix Hunk #1 reject in fs/proc/task_mmu.c (inject missing susfs_def.h header)
+          sed -i '1i #ifdef CONFIG_KSU_SUSFS\n#include <linux/susfs_def.h>\n#endif' fs/proc/task_mmu.c
+
+          # Fix Hunk #1 reject in include/linux/mount.h (inject susfs_mnt_id_backup into struct vfsmount)
+          sed -i '/struct vfsmount {/a #ifdef CONFIG_KSU_SUSFS\n\tu64 susfs_mnt_id_backup;\n#endif' include/linux/mount.h
+
+          # Clean up .rej and .orig files
+          find . -name "*.rej" -delete
+          find . -name "*.orig" -delete
+
+          if [ -d "KernelSU-Next" ]; then
+            cd KernelSU-Next
+            patch -p1 --forward --batch < ../../susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
+          elif [ -d "KernelSU" ]; then
+            cd KernelSU
+            patch -p1 --forward --batch < ../../susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
+          fi
 
       - name: Bypass Module Vermagic Check (Prevents Broken Wi-Fi/Audio)
         run: |
