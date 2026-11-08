@@ -25,12 +25,12 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/LineageOS/android_kernel_oneplus_sm6375 -b lineage-24.0 kernel-source
 
-      - name: Integrate KernelSU-Next (Legacy 5.4 Support)
+      - name: Integrate SukiSU-Ultra (Pre-integrated SUSFS for 5.4)
         run: |
           cd kernel-source
-          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
 
-      - name: Apply SUSFS 5.4 Patches
+      - name: Apply SUSFS 5.4 Kernel Patches
         run: |
           git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu -b kernel-5.4 susfs
           cd kernel-source
@@ -50,14 +50,6 @@ jobs:
           find . -name "*.rej" -delete
           find . -name "*.orig" -delete
 
-          if [ -d "KernelSU-Next" ]; then
-            cd KernelSU-Next
-            patch -p1 --forward --batch < ../../susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
-          elif [ -d "KernelSU" ]; then
-            cd KernelSU
-            patch -p1 --forward --batch < ../../susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
-          fi
-
       - name: Bypass Module Vermagic Check (Prevents Broken Wi-Fi/Audio)
         run: |
           cd kernel-source
@@ -74,8 +66,9 @@ jobs:
           CONFIG_KPROBES=y
           CONFIG_HAVE_KPROBES=y
           CONFIG_KPROBE_EVENTS=y
+          CONFIG_KALLSYMS=y
+          CONFIG_KALLSYMS_ALL=y
           CONFIG_KSU=y
-          CONFIG_KSU_KPROBE_HOOKS=y
           CONFIG_KSU_SUSFS=y
           CONFIG_KSU_SUSFS_SUS_PATH=y
           CONFIG_KSU_SUSFS_SUS_MOUNT=y
@@ -97,7 +90,11 @@ jobs:
             CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
             vendor/holi-qgki_defconfig
 
+          # Compile on all cores; if an error occurs, re-run with -j1 so the exact error is shown at the bottom of the log
           make -j$(nproc --all) O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
+            Image || make -j1 O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
             Image
@@ -110,10 +107,10 @@ jobs:
           sed -i 's|BLOCK=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;|BLOCK=auto;|' AnyKernel3/anykernel.sh
           cp kernel-source/out/arch/arm64/boot/Image AnyKernel3/
           cd AnyKernel3
-          zip -r9 ../AnyKernel3-oscaro-lineage24.0-KSUNext-SUSFS.zip * -x .git README.md *placeholder
+          zip -r9 ../AnyKernel3-oscaro-lineage24.0-KSU-SUSFS.zip * -x .git README.md *placeholder
 
       - name: Upload Compiled Kernel
         uses: actions/upload-artifact@v4
         with:
-          name: oscaro-lineage24.0-ksunext-susfs
-          path: AnyKernel3-oscaro-lineage24.0-KSUNext-SUSFS.zip
+          name: oscaro-lineage24.0-ksu-susfs
+          path: AnyKernel3-oscaro-lineage24.0-KSU-SUSFS.zip
