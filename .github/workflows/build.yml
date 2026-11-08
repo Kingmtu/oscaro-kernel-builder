@@ -14,13 +14,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git ccache automake flex lzop bison gperf \
             build-essential zip curl zlib1g-dev libssl-dev libxml2-utils \
-            xsltproc bc rsync libncurses5-dev python3 libelf-dev dwarves pahole
+            xsltproc bc rsync libncurses5-dev python3 libelf-dev dwarves pahole \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
-      - name: Setup AOSP Clang (LLVM) Toolchain
+      - name: Setup LineageOS Clang (LLVM) Toolchain
         run: |
-          mkdir -p clang
-          curl -LO https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r487747c.tar.gz
-          tar -C clang/ -xzf clang-r487747c.tar.gz
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b clang
 
       - name: Clone oscaro lineage-24.0 Kernel Source
         run: |
@@ -42,7 +41,6 @@ jobs:
       - name: Bypass Module Vermagic Check (Prevents Broken Wi-Fi/Audio)
         run: |
           cd kernel-source
-          # Allow stock lineage-24.0 vendor_boot & vendor modules (wlan.ko) to load cleanly
           sed -i 's/!same_magic(modmagic, vermagic, info->index.vers)/0/' kernel/module.c
           sed -i 's/return -ENOEXEC;/\/\* bypassed \*\//' kernel/module.c || true
 
@@ -75,26 +73,4 @@ jobs:
           
           make O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
-            vendor/holi-qgki_defconfig
-
-          make -j$(nproc --all) O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
-            Image
-
-      - name: Package Flashable AnyKernel3 Zip
-        run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
-          sed -i 's/device.name1=.*/device.name1=oscaro/' AnyKernel3/anykernel.sh
-          sed -i 's/do.devicecheck=1/do.devicecheck=0/' AnyKernel3/anykernel.sh
-          sed -i 's|BLOCK=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;|BLOCK=auto;|' AnyKernel3/anykernel.sh
-          cp kernel-source/out/arch/arm64/boot/Image AnyKernel3/
-          cd AnyKernel3
-          zip -r9 ../AnyKernel3-oscaro-lineage24.0-KSUNext-SUSFS.zip * -x .git README.md *placeholder
-
-      - name: Upload Compiled Kernel
-        uses: actions/upload-artifact@v4
-        with:
-          name: oscaro-lineage24.0-ksunext-susfs
-          path: AnyKernel3-oscaro-lineage24.0-KSUNext-SUSFS.zip
+            CROSS_COMPILE
